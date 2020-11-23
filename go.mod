@@ -1,4 +1,4 @@
-module github.com/vaikas/buildpackstuff
+module github.com/vaikas/buildpackstuffhttp
 
 go 1.15
 

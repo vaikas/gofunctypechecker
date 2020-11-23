@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"strings"
-	"github.com/vaikas/buildpackstuff/pkg/detect"
+	"github.com/vaikas/buildpackstuffhttp/pkg/detect"
 	"io/ioutil"
 	"log"
 	"os"
@@ -13,40 +13,26 @@ import (
 )
 
 const supportedFuncs = `
-Could not find a supported function signature. Examples of supported functions are
-shown below, also showing the imports that you can use. The function must also be visible
-outside of the package (capitalized, for example, Receive vs. receive).
+Could not find a supported function signature. Example of supported function is
+shown below, also showing the import that you can use. The function must also be visible
+outside of the package (capitalized, for example, Handle vs. handle).
 
 import (
-    "context"
-    event "github.com/cloudevents/sdk-go/v2"
-    "github.com/cloudevents/sdk-go/v2/protocol"
+    "net/http"
 )
 
-The following function signatures are supported by this builder:
-func(event.Event)
-func(event.Event) protocol.Result
-func(event.Event) error
-func(context.Context, event.Event)
-func(context.Context, event.Event) protocol.Result
-func(context.Context, event.Event) error
-func(event.Event) *event.Event
-func(event.Event) (*event.Event, protocol.Result)
-func(event.Event) (*event.Event, error)
-func(context.Context, event.Event) *event.Event
-func(context.Context, event.Event) (*event.Event, protocol.Result)
-func(context.Context, event.Event) (*event.Event, error)
+The following function signature is supported by this builder:
+func(http.ResponseWriter, *http.Request)
 `
 
 const planFileFormat = `
 [[provides]]
-name = "ce-go-function"
+name = "http-go-function"
 [[requires]]
-name = "ce-go-function"
+name = "http-go-function"
 [requires.metadata]
 package = "PACKAGE"
-function = "CE_GO_FUNCTION"
-protocol = "CE_GO_PROTOCOL"
+function = "HTTP_GO_FUNCTION"
 `
 
 func printSupportedFunctionsAndExit() {
@@ -75,7 +61,7 @@ func main() {
 	// We yank the base package from go.mod and append CE_GO_PACKAGE into it
 	// if it's given.
 	// TODO: Use library for these...
-	goPackage := os.Getenv("CE_GO_PACKAGE")
+	goPackage := os.Getenv("HTTP_GO_PACKAGE")
 	if goPackage == "" {
 		goPackage = "./"
 	}
@@ -88,11 +74,7 @@ func main() {
 	}
 	log.Println("Using relative path to look for function: ", goPackage)
 
-	goFunction := os.Getenv("CE_GO_FUNCTION")
-	goProtocol := os.Getenv("CE_GO_PROTOCOL")
-	if goProtocol == "" {
-		goProtocol = "http"
-	}
+	goFunction := os.Getenv("HTTP_GO_FUNCTION")
 
 	pack, err := packages.Load(&packages.Config{Mode:packages.NeedName}, "github.com/vaikas/testfunc")
 	if err != nil {
@@ -136,7 +118,7 @@ func main() {
 			// matches what we found.
 			if goFunction == "" || goFunction == deets.Name {
 				deets.Package = fullGoPackage
-				if err := writePlan(planFileName, goProtocol, deets); err != nil {
+				if err := writePlan(planFileName, deets); err != nil {
 					log.Println("failed to write the build plan: ", err)
 				}
 				os.Exit(0)
@@ -148,14 +130,13 @@ func main() {
 
 // lan writes the planFileName with the following format:
 //[[provides]]
-//name = "ce-go-function"
+//name = "http-go-function"
 //[[requires]]
-//name = "ce-go-function"
+//name = "http-go-function"
 //[requires.metadata]
 //package = <details.packageName>
 //function = "details.Name"
-//protocol = "http"
-func writePlan(planFileName, protocol string, details *detect.FunctionDetails) error {
+func writePlan(planFileName string, details *detect.FunctionDetails) error {
 	planFile, err := os.OpenFile(planFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Println("failed to open the plan file for writing", os.Args[2], err)
@@ -165,8 +146,7 @@ func writePlan(planFileName, protocol string, details *detect.FunctionDetails) e
 
 	// Replace the placeholders with valid values
 	replacedPlan := strings.Replace(string(planFileFormat), "PACKAGE", details.Package,1 )
-	replacedPlan = strings.Replace(replacedPlan, "CE_GO_FUNCTION", details.Name, 1)
-	replacedPlan = strings.Replace(replacedPlan, "CE_GO_PROTOCOL", protocol, 1)
+	replacedPlan = strings.Replace(replacedPlan, "HTTP_GO_FUNCTION", details.Name, 1)
 	if _, err := planFile.WriteString(replacedPlan); err != nil {
 		printSupportedFunctionsAndExit()
 	}

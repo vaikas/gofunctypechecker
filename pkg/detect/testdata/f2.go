@@ -1,14 +1,10 @@
 package functionpkg
 
 import (
-	"context"
 	"fmt"
-
-	v2 "github.com/cloudevents/sdk-go/v2"
-	prot "github.com/cloudevents/sdk-go/v2/protocol"
+	nethttp "net/http"
 )
 
-func Receive2(ctx context.Context, event v2.Event) (*v2.Event, prot.Result) {
-	fmt.Printf("☁️  CloudEvents.Event\n%s", event.String())
-	return nil, nil
+func Receive2(writer nethttp.ResponseWriter, request *nethttp.Request) {
+	fmt.Println("doing stuff here")
 }

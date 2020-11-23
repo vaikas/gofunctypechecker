@@ -1,16 +1,13 @@
-# Go CloudEvents function detection
+# Go HTTP handler function detection
 
 This repo has some playthings that I used for learning buildpacks as well as how
 to use Go tools for doing inspection of source code in Go. Basic idea is to be
 able to use these tools to detect if a given Go source code is compatible with
-[CloudEvents go-sdk](https://github.com/cloud-events/sdk-go/). Rough idea being
+[net.http.HandlerFunc](https://godoc.org/net/http#HandlerFunc). Rough idea being
 that we'll inspect the files and determine if we can autogen enough scaffolding
-to just inject the function code in, and have the user just be able to write the
-function code alone without having to spin up the web server for
-it. But... Wait, there's more, because the function specified has nothing that
-specifies it as an HTTP handler, we should be able to build a buildpack that
-actually is protocol agnostic, and the function could be built targeting
-different protocols.
+to just inject the HTTP handler code in, and have the user just be able to write the
+handler code alone without having to spin up the web server for
+it. 
 
 # Building
 
@@ -25,17 +22,5 @@ as appropriate.
 
 # Supported function signatures
 
-While the CloudEvents SDK supports multiple signatures, I thought the most
-useful ones actually involve events, so the supported function signatures are
-these:
-
-```
-func(event.Event)
-func(event.Event) protocol.Result
-func(context.Context, event.Event)
-func(context.Context, event.Event) protocol.Result
-func(event.Event) *event.Event
-func(event.Event) (*event.Event, protocol.Result)
-func(context.Context, event.Event) *event.Event
-func(context.Context, event.Event) (*event.Event, protocol.Result)
-```
+Basically, you just need to have a file that imports the net/http and
+has an externally visible (capitalized) function that implements the HTTP handler.

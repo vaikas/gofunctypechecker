@@ -2,10 +2,9 @@ package function
 
 import (
 	"fmt"
-
-	ce "github.com/cloudevents/sdk-go/v2"
+	"net/http"
 )
 
-func Receive(event ce.Event) {
-	fmt.Printf("☁️  CloudEvents.Event\n%s", event.String())
+func Receive(writer http.ResponseWriter, request *http.Request) {
+	fmt.Println("doing stuff here")
 }

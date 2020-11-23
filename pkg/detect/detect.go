@@ -17,20 +17,15 @@ type Function struct {
 }
 
 const (
-	ceImport         = `"github.com/cloudevents/sdk-go/v2"`
-	ceProtocolImport = `"github.com/cloudevents/sdk-go/v2/protocol"`
-	contextImport    = `"context"`
+	httpImport         = `"net/http"`
 )
 
 type paramType int
 
 const (
 	notSuportedType paramType = iota
-	contextType
-	eventType
-	ptrEventType
-	protocolResultType
-	errorType
+	responseWriterType
+	ptrRequestType
 )
 
 type functionSignature struct {
@@ -39,44 +34,17 @@ type functionSignature struct {
 }
 
 // Valid function signatures are like so (defined in: github.com/cloudevents/sdk-go/v2/client/receiver.go):
-// * func()                                  *** NOT SUPPORTED ***
-// * func() error                            *** NOT SUPPORTED ***
-// * func(context.Context)                   *** NOT SUPPORTED ***
-// * func(context.Context) protocol.Result   *** NOT SUPPORTED ***
-// * func(event.Event)
-// * func(event.Event) protocol.Result
-// * func(context.Context, event.Event)
-// * func(context.Context, event.Event) protocol.Result
-// * func(event.Event) *event.Event
-// * func(event.Event) (*event.Event, protocol.Result)
-// * func(context.Context, event.Event) *event.Event
-// * func(context.Context, event.Event) (*event.Event, protocol.Result)
-// * func(context.Context, event.Event) (*event.Event, error)
+// * func(http.ResponseWriter, *http.Request)
 var validFunctions = map[string]functionSignature{
-	//	"func(context.Context)":                                              functionSignature{in: []paramType{contextType}},
-	//	"func(context.Context) protocol.Result":                              functionSignature{in: []paramType{contextType}, out: []paramType{protocolResultType}},
-	"func(event.Event)":                                                  functionSignature{in: []paramType{eventType}},
-	"func(event.Event) protocol.Result":                                  functionSignature{in: []paramType{eventType}, out: []paramType{protocolResultType}},
-	"func(event.Event) error":                                            functionSignature{in: []paramType{eventType}, out: []paramType{errorType}},
-	"func(context.Context, event.Event)":                                 functionSignature{in: []paramType{contextType, eventType}},
-	"func(context.Context, event.Event) protocol.Result":                 functionSignature{in: []paramType{contextType, eventType}, out: []paramType{protocolResultType}},
-	"func(context.Context, event.Event) error":                           functionSignature{in: []paramType{contextType, eventType}, out: []paramType{errorType}},
-	"func(event.Event) *event.Event":                                     functionSignature{in: []paramType{eventType}, out: []paramType{ptrEventType}},
-	"func(event.Event) (*event.Event, protocol.Result)":                  functionSignature{in: []paramType{eventType}, out: []paramType{ptrEventType, protocolResultType}},
-	"func(event.Event) (*event.Event, error)":                            functionSignature{in: []paramType{eventType}, out: []paramType{ptrEventType, errorType}},
-	"func(context.Context, event.Event) *event.Event":                    functionSignature{in: []paramType{contextType, eventType}, out: []paramType{ptrEventType}},
-	"func(context.Context, event.Event) (*event.Event, protocol.Result)": functionSignature{in: []paramType{contextType, eventType}, out: []paramType{ptrEventType, protocolResultType}},
-	"func(context.Context, event.Event) (*event.Event, error)":           functionSignature{in: []paramType{contextType, eventType}, out: []paramType{ptrEventType, errorType}},
+	"func(http.ResponseWriter, *http.Request)":           functionSignature{in: []paramType{responseWriterType, ptrRequestType}, out: []paramType{}},
 }
 
 // imports keeps track of which files that we care about are imported as which
 // local imports. For example if you import:
-// 	cloudevents "github.com/cloudevents/sdk-go/v2"
-// localCEImport would be set to cloudevents
+// 	nethttp "net/http"
+// localHTTPImport would be set to nethttp
 type imports struct {
-	localCEImport       string
-	localProtocolImport string
-	localContextImport  string
+	localHTTPImport       string
 }
 
 type FunctionDetails struct {
@@ -121,25 +89,11 @@ func CheckFile(f *Function) *FunctionDetails {
 		// Check if the file imports the cloud events SDK that we're expecting
 		case *ast.File:
 			for _, i := range fn.Imports {
-				if i.Path.Value == ceImport {
+				if i.Path.Value == httpImport {
 					if i.Name == nil {
-						c.localCEImport = "v2"
+						c.localHTTPImport = "http"
 					} else {
-						c.localCEImport = i.Name.String()
-					}
-				}
-				if i.Path.Value == ceProtocolImport {
-					if i.Name == nil {
-						c.localProtocolImport = "protocol"
-					} else {
-						c.localProtocolImport = i.Name.String()
-					}
-				}
-				if i.Path.Value == contextImport {
-					if i.Name == nil {
-						c.localContextImport = "context"
-					} else {
-						c.localContextImport = i.Name.String()
+						c.localHTTPImport = i.Name.String()
 					}
 				}
 			}
@@ -168,9 +122,9 @@ func CheckFile(f *Function) *FunctionDetails {
 // representation of the supported function or "" if the function signature
 // is not supported.
 // For example
-// func Receive(ctx ctx.Context, event cloudevents.Event) (*cloudevents.Event, protocol.Result) {
+// func Receive(http.ResponseWriter, *http.Request) {
 // would return:
-// func(context.Context, event.Event) (*event.Event, protocol.Result)
+// func(http.ResponseWriter, *http.Request)
 func checkFunction(c imports, f *ast.FuncType) string {
 	fs := functionSignature{}
 	if f == nil {
@@ -215,47 +169,27 @@ func checkFunction(c imports, f *ast.FuncType) string {
 // typeToParamType will take import paths and an expression and try to map
 // it to know paramType. If supported paramType is not found, will return
 // notSupportedType
-// TODO: Consider supporting mapping error. I just don't know how to and those
-// functions do not really seem all that important to support.
 func typeToParamType(c imports, e ast.Expr) paramType {
 	switch e := e.(type) {
 	// Check if pointer to Event
 	case *ast.StarExpr:
 		if s, ok := e.X.(*ast.SelectorExpr); ok {
 			// We only support pointer to Event
-			if s.Sel.String() == "Event" {
+			if s.Sel.String() == "Request" {
 				if im, ok := s.X.(*ast.Ident); ok {
-					if im.Name == c.localCEImport {
-						return ptrEventType
+					if im.Name == c.localHTTPImport {
+						return ptrRequestType
 					}
 				}
 			}
 		}
 	case *ast.SelectorExpr:
-		if e.Sel.String() == "Event" {
+		if e.Sel.String() == "ResponseWriter" {
 			if im, ok := e.X.(*ast.Ident); ok {
-				if c.localCEImport != "" && im.Name == c.localCEImport {
-					return eventType
+				if c.localHTTPImport != "" && im.Name == c.localHTTPImport {
+					return responseWriterType
 				}
 			}
-		}
-		if e.Sel.String() == "Context" {
-			if im, ok := e.X.(*ast.Ident); ok {
-				if c.localContextImport != "" && im.Name == "" || im.Name == c.localContextImport {
-					return contextType
-				}
-			}
-		}
-		if e.Sel.String() == "Result" {
-			if im, ok := e.X.(*ast.Ident); ok {
-				if c.localProtocolImport != "" && im.Name == c.localProtocolImport {
-					return protocolResultType
-				}
-			}
-		}
-	case *ast.Ident:
-		if e.Name == "error" {
-			return errorType
 		}
 	}
 	return notSuportedType
