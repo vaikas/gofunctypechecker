@@ -2,4 +2,4 @@ module github.com/vaikas/buildpackstuff
 
 go 1.15
 
-require github.com/gorilla/mux v1.8.0
+require golang.org/x/tools v0.0.0-20201120155355-20be4ac4bd6e // indirect

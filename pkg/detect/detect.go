@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-
 	//	"unicode"
 )
 
@@ -31,6 +30,7 @@ const (
 	eventType
 	ptrEventType
 	protocolResultType
+	errorType
 )
 
 type functionSignature struct {
@@ -51,17 +51,22 @@ type functionSignature struct {
 // * func(event.Event) (*event.Event, protocol.Result)
 // * func(context.Context, event.Event) *event.Event
 // * func(context.Context, event.Event) (*event.Event, protocol.Result)
+// * func(context.Context, event.Event) (*event.Event, error)
 var validFunctions = map[string]functionSignature{
-//	"func(context.Context)":                                              functionSignature{in: []paramType{contextType}},
-//	"func(context.Context) protocol.Result":                              functionSignature{in: []paramType{contextType}, out: []paramType{protocolResultType}},
+	//	"func(context.Context)":                                              functionSignature{in: []paramType{contextType}},
+	//	"func(context.Context) protocol.Result":                              functionSignature{in: []paramType{contextType}, out: []paramType{protocolResultType}},
 	"func(event.Event)":                                                  functionSignature{in: []paramType{eventType}},
 	"func(event.Event) protocol.Result":                                  functionSignature{in: []paramType{eventType}, out: []paramType{protocolResultType}},
+	"func(event.Event) error":                                            functionSignature{in: []paramType{eventType}, out: []paramType{errorType}},
 	"func(context.Context, event.Event)":                                 functionSignature{in: []paramType{contextType, eventType}},
 	"func(context.Context, event.Event) protocol.Result":                 functionSignature{in: []paramType{contextType, eventType}, out: []paramType{protocolResultType}},
+	"func(context.Context, event.Event) error":                           functionSignature{in: []paramType{contextType, eventType}, out: []paramType{errorType}},
 	"func(event.Event) *event.Event":                                     functionSignature{in: []paramType{eventType}, out: []paramType{ptrEventType}},
 	"func(event.Event) (*event.Event, protocol.Result)":                  functionSignature{in: []paramType{eventType}, out: []paramType{ptrEventType, protocolResultType}},
+	"func(event.Event) (*event.Event, error)":                            functionSignature{in: []paramType{eventType}, out: []paramType{ptrEventType, errorType}},
 	"func(context.Context, event.Event) *event.Event":                    functionSignature{in: []paramType{contextType, eventType}, out: []paramType{ptrEventType}},
 	"func(context.Context, event.Event) (*event.Event, protocol.Result)": functionSignature{in: []paramType{contextType, eventType}, out: []paramType{ptrEventType, protocolResultType}},
+	"func(context.Context, event.Event) (*event.Event, error)":           functionSignature{in: []paramType{contextType, eventType}, out: []paramType{ptrEventType, errorType}},
 }
 
 // imports keeps track of which files that we care about are imported as which
@@ -75,7 +80,8 @@ type imports struct {
 }
 
 type FunctionDetails struct {
-	Package string
+	Name string
+	Package   string
 	Signature string
 }
 
@@ -106,15 +112,14 @@ func CheckFile(f *Function) *FunctionDetails {
 	}
 
 	c := imports{}
+	var functionName = ""
 	var signature = ""
-	var funcPackage = ""
 
 	// main inspection
 	ast.Inspect(astFile, func(n ast.Node) bool {
 		switch fn := n.(type) {
 		// Check if the file imports the cloud events SDK that we're expecting
 		case *ast.File:
-			funcPackage = fn.Name.String()
 			for _, i := range fn.Imports {
 				if i.Path.Value == ceImport {
 					if i.Name == nil {
@@ -141,6 +146,7 @@ func CheckFile(f *Function) *FunctionDetails {
 
 			for _, d := range fn.Decls {
 				if f, ok := d.(*ast.FuncDecl); ok {
+					functionName = f.Name.Name
 					if f.Recv != nil {
 						fmt.Println("Found receiver ", f.Recv)
 					}
@@ -152,8 +158,8 @@ func CheckFile(f *Function) *FunctionDetails {
 		}
 		return true
 	})
-	if signature != "" && funcPackage != "" {
-		return &FunctionDetails{Package: funcPackage, Signature: signature}
+	if signature != "" && functionName != "" {
+		return &FunctionDetails{Name: functionName, Signature: signature}
 	}
 	return nil
 }
@@ -247,7 +253,10 @@ func typeToParamType(c imports, e ast.Expr) paramType {
 				}
 			}
 		}
-
+	case *ast.Ident:
+		if e.Name == "error" {
+			return errorType
+		}
 	}
 	return notSuportedType
 }
