@@ -3,13 +3,13 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"strings"
-	"github.com/vaikas/buildpackstuffhttp/pkg/detect"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
-	"golang.org/x/tools/go/packages"
+	"strings"
+
+	"github.com/vaikas/gofunctypechecker/pkg/detect"
 )
 
 const supportedFuncs = `
@@ -76,14 +76,6 @@ func main() {
 
 	goFunction := os.Getenv("HTTP_GO_FUNCTION")
 
-	pack, err := packages.Load(&packages.Config{Mode:packages.NeedName}, "github.com/vaikas/testfunc")
-	if err != nil {
-		log.Println("Failed to load package: ", err)
-		os.Exit(100)
-	}
-	for _, p := range pack {
-		log.Printf("GOT PACKAGE: %+v\n", p)
-	}
 	planFileName := os.Args[2]
 	log.Println("using plan file: ", planFileName)
 
@@ -95,6 +87,14 @@ func main() {
 		printSupportedFunctionsAndExit()
 	}
 
+	// Create a detector, this one just uses http handler stuff for example.
+	var validFunctions = []detect.FunctionSignature{
+		{In: []detect.FunctionArg{
+			{ImportPath: "net/http", Name: "ResponseWriter"},
+			{ImportPath: "net/http", Name: "Request", Pointer: true},
+		}}}
+
+	detector := detect.NewDetector(validFunctions)
 	for _, f := range files {
 		log.Printf("Processing file %s\n", f)
 		// read file
@@ -112,7 +112,11 @@ func main() {
 			printSupportedFunctionsAndExit()
 		}
 		f := &detect.Function{File: f, Source: string(srcbuf)}
-		if deets := detect.CheckFile(f); deets != nil {
+		deets, err := detector.CheckFile(f)
+		if err != nil {
+			log.Panic("Failed to process file %q : %s", f, err)
+		}
+		if deets != nil {
 			log.Printf("Found supported function %q in package %q signature %q", deets.Name, deets.Package, deets.Signature)
 			// If the user didn't specify a specific function, use it. If they specified the function, make sure it
 			// matches what we found.
@@ -145,7 +149,7 @@ func writePlan(planFileName string, details *detect.FunctionDetails) error {
 	defer planFile.Close()
 
 	// Replace the placeholders with valid values
-	replacedPlan := strings.Replace(string(planFileFormat), "PACKAGE", details.Package,1 )
+	replacedPlan := strings.Replace(string(planFileFormat), "PACKAGE", details.Package, 1)
 	replacedPlan = strings.Replace(replacedPlan, "HTTP_GO_FUNCTION", details.Name, 1)
 	if _, err := planFile.WriteString(replacedPlan); err != nil {
 		printSupportedFunctionsAndExit()
@@ -157,13 +161,17 @@ func writePlan(planFileName string, details *detect.FunctionDetails) error {
 // Should be replaced with something that actually understands go...
 func readModuleName() (string, error) {
 	modFile, err := os.Open("./go.mod")
-	if err != nil { return "", err}
+	if err != nil {
+		return "", err
+	}
 	defer modFile.Close()
 	scanner := bufio.NewScanner(modFile)
 	for scanner.Scan() {
 		pieces := strings.Split(scanner.Text(), " ")
 		fmt.Printf("FOund pieces as %+v\n", pieces)
-		if len(pieces) >= 2 && pieces[0] == "module" {return pieces[1], nil}
+		if len(pieces) >= 2 && pieces[0] == "module" {
+			return pieces[1], nil
+		}
 	}
 	return "", nil
 }
