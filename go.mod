@@ -1,4 +1,4 @@
-module github.com/vaikas/buildpackstuffhttp
+module github.com/vaikas/gofunctypechecker
 
 go 1.15
 

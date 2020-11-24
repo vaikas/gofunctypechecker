@@ -1,26 +1,16 @@
-# Go HTTP handler function detection
+# Go function detection library
 
-This repo has some playthings that I used for learning buildpacks as well as how
-to use Go tools for doing inspection of source code in Go. Basic idea is to be
-able to use these tools to detect if a given Go source code is compatible with
-[net.http.HandlerFunc](https://godoc.org/net/http#HandlerFunc). Rough idea being
-that we'll inspect the files and determine if we can autogen enough scaffolding
-to just inject the HTTP handler code in, and have the user just be able to write the
-handler code alone without having to spin up the web server for
-it. 
+This repo has a WIP library for being able to scan files and see if they match
+a particular signature. The motivation for this was from learning to use buildpacks
+and in particular having a detection logic that would be able to decide a cooler
+user experience by inspecting the given go source code and give a highest abstraction
+level supported by various buildpacks. Some examples are being able to only create
+a handler method for [CloudEvents](https://github.com/cloudevents/sdk-go) library and
+have the build know this is a supported signature and create the necessary scaffolding
+to simply just call this function.
 
-# Building
+# Specifying supported function signatures
 
-go-buildpack/bin/detect is a binary that has been built like this:
-
-```shell
-GOOS=linux GOARCH=amd64 go build ./cmd/detect/main.go && cp main ~/buildpack-go/go-buildpack/bin/detect
-```
-
-If you want to target a different arch / OS, you'd have to modify the GO* params
-as appropriate.
-
-# Supported function signatures
-
-Basically, you just need to have a file that imports the net/http and
-has an externally visible (capitalized) function that implements the HTTP handler.
+You can control which function signatures are supported either by populating the datastructures, or
+by creating a config file (in json, later yaml & toml). For examples on how to use this, best place for
+now is to look at the [test code](./pkg/detect/detect_test.go).

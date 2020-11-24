@@ -1,0 +1,23 @@
+{
+  "functionSignatures": [
+  {"in": [
+    {"importPath": "net/http", "name": "ResponseWriter"},
+    {"importPath": "net/http", "name": "Request", "pointer": true}
+  ]},
+    {"in": [
+      {"importPath": "github.com/cloudevents/sdk-go/v2", "name": "Event"}
+    ],
+      "out": [
+        {"importPath": "github.com/cloudevents/sdk-go/v2", "name": "Event", "pointer": true},
+        {"name": "error"}
+      ]},
+    {"in": [
+      {"importPath":  "context", "name": "Context"},
+      {"importPath": "github.com/cloudevents/sdk-go/v2", "name": "Event"}
+    ],
+      "out": [
+        {"importPath": "github.com/cloudevents/sdk-go/v2", "name": "Event", "pointer": true},
+        {"name": "error"}
+      ]}
+  ]
+}

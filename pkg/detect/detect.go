@@ -1,14 +1,15 @@
 package detect
 
 import (
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/ioutil"
-	"log"
 	"os"
-	//	"unicode"
+	"strconv"
+	"strings"
 )
 
 type Function struct {
@@ -16,95 +17,172 @@ type Function struct {
 	Source string // full source file
 }
 
-const (
-	httpImport         = `"net/http"`
-)
-
-type paramType int
-
-const (
-	notSuportedType paramType = iota
-	responseWriterType
-	ptrRequestType
-)
-
-type functionSignature struct {
-	in  []paramType
-	out []paramType
+// FunctionArg describes a single argument (input or output) for a given variable
+// For example a function from "net/http" that conforms to the Handler function, that looks
+// like this "func(http.ResponseWriter, *http.Request)" would have two arguments like so:
+// FunctionArg{ImportPath: "net/http", Name: "ResponseWriter"}
+// FunctionArg{ImportPath: "net/http", Name: "Request", Pointer: true}
+type FunctionArg struct {
+	ImportPath string `json:"importPath,omitempty"`
+	Name       string `json:"name"`
+	Pointer    bool   `json:"pointer,omitempty"`
 }
 
-// Valid function signatures are like so (defined in: github.com/cloudevents/sdk-go/v2/client/receiver.go):
-// * func(http.ResponseWriter, *http.Request)
-var validFunctions = map[string]functionSignature{
-	"func(http.ResponseWriter, *http.Request)":           functionSignature{in: []paramType{responseWriterType, ptrRequestType}, out: []paramType{}},
+func (fa *FunctionArg) String() string {
+	ret := ""
+	if fa.Pointer {
+		ret += "*"
+	}
+	// If there's a slash In the path, pull Out the last part of the path, otherwise use full
+	// for things like "context", "fmt", etc.
+	pkg := fa.ImportPath
+	if strings.Contains(fa.ImportPath, "/") {
+		pathPieces := strings.Split(fa.ImportPath, "/")
+		pkg = pathPieces[len(pathPieces)-1]
+	}
+	if pkg != "" {
+		ret += pkg + "." + fa.Name
+	} else {
+		ret += fa.Name
+	}
+	return ret
 }
 
-// imports keeps track of which files that we care about are imported as which
-// local imports. For example if you import:
-// 	nethttp "net/http"
-// localHTTPImport would be set to nethttp
-type imports struct {
-	localHTTPImport       string
+type FunctionSignature struct {
+	In  []FunctionArg `json:"in,omitempty"`
+	Out []FunctionArg `json:"out,omitempty"`
+}
+
+type FunctionSignatures struct {
+	FunctionSignatures []FunctionSignature `json:"functionSignatures"`
+}
+
+func (fs *FunctionSignature) String() string {
+	s := "func("
+	for i, in := range fs.In {
+		s += in.String()
+		if i != len(fs.In)-1 {
+			s += ", "
+		}
+	}
+	s += ")"
+	if len(fs.Out) > 0 {
+		if len(fs.Out) > 1 {
+			s += " ("
+		}
+		for i, out := range fs.Out {
+			s += out.String()
+			if i != len(fs.Out)-1 {
+				s += ", "
+			}
+		}
+		if len(fs.Out) > 1 {
+			s += ")"
+		}
+	}
+	return s
 }
 
 type FunctionDetails struct {
-	Name string
+	Name      string
 	Package   string
 	Signature string
 }
 
-func ReadAndCheckFile(filename string) *FunctionDetails {
+type Detector struct {
+	sigs []FunctionSignature
+}
+
+func NewDetector(sigs []FunctionSignature) *Detector {
+	return &Detector{sigs: sigs}
+}
+
+func NewDetectorFromFile(fileName string) (*Detector, error) {
+	in, err := readFile(fileName)
+	if err != nil {
+		return nil, err
+	}
+	var fs FunctionSignatures
+	if err := json.Unmarshal([]byte(in), &fs); err != nil {
+		return nil, err
+	}
+	return &Detector{sigs: fs.FunctionSignatures}, err
+}
+
+func readFile(filename string) (string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		log.Println(err)
-		return nil
+		return "", err
 	}
 	defer file.Close()
 
-	// read the whole file in
+	// read the whole file In
 	srcbuf, err := ioutil.ReadAll(file)
 	if err != nil {
-		log.Println(err)
-		return nil
+		return "", err
 	}
-	return CheckFile(&Function{File: filename, Source: string(srcbuf)})
+	return string(srcbuf), nil
 }
 
-func CheckFile(f *Function) *FunctionDetails {
+func (d *Detector) ReadAndCheckFile(filename string) (*FunctionDetails, error) {
+	src, err := readFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	return d.CheckFile(&Function{File: filename, Source: string(src)})
+}
+
+func (d *Detector) CheckFile(f *Function) (*FunctionDetails, error) {
 	// file set
 	fset := token.NewFileSet()
 	astFile, err := parser.ParseFile(fset, f.File, f.Source, 0)
 	if err != nil {
-		log.Println(err)
-		return nil
+		return nil, err
 	}
 
-	c := imports{}
+	// imports keeps track of which files that we care about are imported as which
+	// local imports. For example if you import:
+	// 	nethttp "net/http"
+	// localImports["nethttp"] -> "net/http"
+	localImports := make(map[string]string)
+
 	var functionName = ""
 	var signature = ""
 
 	// main inspection
 	ast.Inspect(astFile, func(n ast.Node) bool {
 		switch fn := n.(type) {
-		// Check if the file imports the cloud events SDK that we're expecting
+		// Create the mapping of localimports to the full import paths
 		case *ast.File:
 			for _, i := range fn.Imports {
-				if i.Path.Value == httpImport {
-					if i.Name == nil {
-						c.localHTTPImport = "http"
-					} else {
-						c.localHTTPImport = i.Name.String()
-					}
+				// We need to unquote the path first since it's quoted
+				impPath, err := strconv.Unquote(i.Path.Value)
+				if err != nil {
+					fmt.Printf("failed to unquote import path %q : %s\n", i.Path.Value, err)
+					return false
+				}
+
+				if i.Name != nil {
+					// There's a local import path, use that
+					localImports[i.Name.String()] = impPath
+				} else {
+					// There isn't a local import defined, so use the last part
+					// of the import path
+					pathPieces := strings.Split(impPath, "/")
+					localImports[pathPieces[len(pathPieces)-1]] = impPath
 				}
 			}
+			for li, imp := range localImports {
+				fmt.Printf("%q => %q\n", li, imp)
+			}
 
-			for _, d := range fn.Decls {
-				if f, ok := d.(*ast.FuncDecl); ok {
+			for _, decl := range fn.Decls {
+				if f, ok := decl.(*ast.FuncDecl); ok {
 					functionName = f.Name.Name
 					if f.Recv != nil {
 						fmt.Println("Found receiver ", f.Recv)
 					}
-					if sig := checkFunction(c, f.Type); sig != "" {
+					if sig := d.checkFunction(localImports, f.Type); sig != "" {
 						signature = sig
 					}
 				}
@@ -113,9 +191,9 @@ func CheckFile(f *Function) *FunctionDetails {
 		return true
 	})
 	if signature != "" && functionName != "" {
-		return &FunctionDetails{Name: functionName, Signature: signature}
+		return &FunctionDetails{Name: functionName, Signature: signature}, nil
 	}
-	return nil
+	return nil, nil
 }
 
 // checkFunction takes a function signature and returns a friendly (string)
@@ -125,72 +203,74 @@ func CheckFile(f *Function) *FunctionDetails {
 // func Receive(http.ResponseWriter, *http.Request) {
 // would return:
 // func(http.ResponseWriter, *http.Request)
-func checkFunction(c imports, f *ast.FuncType) string {
-	fs := functionSignature{}
+func (d *Detector) checkFunction(c map[string]string, f *ast.FuncType) string {
+	fs := FunctionSignature{}
 	if f == nil {
 		return ""
 	}
 	if f.Params != nil {
 		for _, p := range f.Params.List {
-			t := typeToParamType(c, p.Type)
-			fs.in = append(fs.in, t)
+			t := typeToFunctionArg(c, p.Type)
+			fs.In = append(fs.In, t)
 		}
 	}
 	if f.Results != nil {
 		for _, r := range f.Results.List {
-			t := typeToParamType(c, r.Type)
-			fs.out = append(fs.out, t)
+			t := typeToFunctionArg(c, r.Type)
+			fs.Out = append(fs.Out, t)
 		}
 	}
 
-	for k, v := range validFunctions {
-		if len(fs.in) == len(v.in) && len(fs.out) == len(v.out) {
+	for _, a := range fs.In {
+		fmt.Printf("Input arg: %+v\n", a)
+	}
+	for _, a := range fs.Out {
+		fmt.Printf("Output arg: %+v\n", a)
+	}
+
+	for _, v := range d.sigs {
+		sig := v.String()
+		fmt.Printf("Checking function signature: %q\n", sig)
+		if len(fs.In) == len(v.In) && len(fs.Out) == len(v.Out) {
 			match := true
-			for i := range fs.in {
-				if fs.in[i] != v.in[i] {
+			for i := range fs.In {
+				if fs.In[i] != v.In[i] {
 					match = false
 					continue
 				}
 			}
-			for i := range fs.out {
-				if fs.out[i] != v.out[i] {
+			for i := range fs.Out {
+				if fs.Out[i] != v.Out[i] {
 					match = false
 					continue
 				}
 			}
 			if match {
-				return k
+				return sig
 			}
 		}
 	}
 	return ""
 }
 
-// typeToParamType will take import paths and an expression and try to map
-// it to know paramType. If supported paramType is not found, will return
-// notSupportedType
-func typeToParamType(c imports, e ast.Expr) paramType {
+// typeToFunctionArg will take import paths and an expression and maps it to
+// a FunctionArg.
+func typeToFunctionArg(c map[string]string, e ast.Expr) FunctionArg {
 	switch e := e.(type) {
 	// Check if pointer to Event
 	case *ast.StarExpr:
 		if s, ok := e.X.(*ast.SelectorExpr); ok {
-			// We only support pointer to Event
-			if s.Sel.String() == "Request" {
-				if im, ok := s.X.(*ast.Ident); ok {
-					if im.Name == c.localHTTPImport {
-						return ptrRequestType
-					}
-				}
+			if im, ok := s.X.(*ast.Ident); ok {
+				return FunctionArg{ImportPath: c[im.Name], Name: s.Sel.String(), Pointer: true}
 			}
 		}
 	case *ast.SelectorExpr:
-		if e.Sel.String() == "ResponseWriter" {
-			if im, ok := e.X.(*ast.Ident); ok {
-				if c.localHTTPImport != "" && im.Name == c.localHTTPImport {
-					return responseWriterType
-				}
-			}
+		if im, ok := e.X.(*ast.Ident); ok {
+			return FunctionArg{ImportPath: c[im.Name], Name: e.Sel.String()}
 		}
+	case *ast.Ident:
+		// Built In... Or something else?
+		return FunctionArg{Name: e.Name}
 	}
-	return notSuportedType
+	return FunctionArg{}
 }
