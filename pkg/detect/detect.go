@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -123,17 +124,34 @@ func NewDetector(sigs []FunctionSignature) *Detector {
 	return &Detector{sigs: sigs}
 }
 
+func NewDetectorFromURL(u string) (*Detector, error) {
+	resp, err := http.Get(u)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return NewDetectorFromString(string(body))
+}
+
 func NewDetectorFromFile(fileName string) (*Detector, error) {
 	in, err := readFile(fileName)
 	if err != nil {
 		return nil, err
 	}
+	return NewDetectorFromString(in)
+}
+
+func NewDetectorFromString(config string) (*Detector, error) {
 	var fs FunctionSignatures
-	if err := yaml.Unmarshal([]byte(in), &fs); err == nil {
+	if err := yaml.Unmarshal([]byte(config), &fs); err == nil {
 		return &Detector{sigs: fs.FunctionSignatures}, err
 	}
 	// Ok, try to parse it as toml.
-	if _, err := toml.Decode(in, &fs); err != nil {
+	if _, err := toml.Decode(config, &fs); err != nil {
 		return nil, err
 	}
 	return &Detector{sigs: fs.FunctionSignatures}, nil
