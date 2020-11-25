@@ -1,38 +1,38 @@
 functionSignatures:
   - in:
-    - importPath: "net/http"
-      name: "ResponseWriter"
-    - importPath: "net/http"
-      name: "Request"
-      pointer: true
+      - importPath: net/http
+        name: ResponseWriter
+      - importPath: net/http
+        name: Request
+        pointer: true
   - in:
-    - importPath: "github.com/cloudevents/sdk-go/v2"
-      name: "Event"
+      - importPath: github.com/cloudevents/sdk-go/v2
+        name: Event
     out:
-    - importPath: "github.com/cloudevents/sdk-go/v2"
-      name: "Event"
-      pointer: true
-    - name: "error"
+      - importPath: github.com/cloudevents/sdk-go/v2
+        name: Event
+        pointer: true
+      - name: error
   - in:
-    - importPath: "context"
-      name: "Context"
-    - importPath: "github.com/cloudevents/sdk-go/v2"
-      name: "Event"
+      - importPath: context
+        name: Context
+      - importPath: github.com/cloudevents/sdk-go/v2
+        name: Event
     out:
-    - importPath: "github.com/cloudevents/sdk-go/v2"
-      name: "Event"
-      pointer: true
-    - name: "error"
+      - importPath: github.com/cloudevents/sdk-go/v2
+        name: Event
+        pointer: true
+      - name: error
   - in:
-    - importPath: "context"
-      name: "Context"
-    - importPath: "github.com/mattmoor/korpc-sample/gen/proto"
-      name: "Request"
-      pointer: true
-      channel: "RECEIVE"
-    - importPath: "github.com/mattmoor/korpc-sample/gen/proto"
-      name: "Response"
-      pointer: true
-      channel: "BOTH"
+      - importPath: context
+        name: Context
+      - importPath: github.com/mattmoor/korpc-sample/gen/proto
+        name: Request
+        pointer: true
+        channel: RECEIVE
+      - importPath: github.com/mattmoor/korpc-sample/gen/proto
+        name: Response
+        pointer: true
+        channel: BOTH
     out:
-      - name: "error"
+      - name: error
