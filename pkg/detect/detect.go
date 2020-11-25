@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/ghodss/yaml"
+    "github.com/BurntSushi/toml"
 )
 
 type Function struct {
@@ -128,10 +129,14 @@ func NewDetectorFromFile(fileName string) (*Detector, error) {
 		return nil, err
 	}
 	var fs FunctionSignatures
-	if err := yaml.Unmarshal([]byte(in), &fs); err != nil {
+	if err := yaml.Unmarshal([]byte(in), &fs); err == nil {
+		return &Detector{sigs: fs.FunctionSignatures}, err
+	}
+	// Ok, try to parse it as toml.
+	if _, err := toml.Decode(in, &fs); err != nil {
 		return nil, err
 	}
-	return &Detector{sigs: fs.FunctionSignatures}, err
+	return &Detector{sigs: fs.FunctionSignatures}, nil
 }
 
 func readFile(filename string) (string, error) {

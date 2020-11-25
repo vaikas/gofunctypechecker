@@ -4,6 +4,7 @@ import "testing"
 
 const signatureFileJSON = "./testdata/signatures.json"
 const signatureFileYAML = "./testdata/signatures.yaml"
+const signatureFileTOML = "./testdata/signatures.toml"
 
 var tests = map[string]*FunctionDetails{
 	"./testdata/f1.go": &FunctionDetails{
@@ -75,6 +76,14 @@ func TestAllCasesFromJSONFile(t *testing.T) {
 
 func TestAllCasesFromYAMLFile(t *testing.T) {
 	d, err := NewDetectorFromFile(signatureFileYAML)
+	if err != nil {
+		t.Fatalf("Failed to read function signatures from file: %q : %s ", signatureFileJSON, err)
+	}
+	runTests(t, d)
+}
+
+func TestAllCasesFromTOMLFile(t *testing.T) {
+	d, err := NewDetectorFromFile(signatureFileTOML)
 	if err != nil {
 		t.Fatalf("Failed to read function signatures from file: %q : %s ", signatureFileJSON, err)
 	}

@@ -1,0 +1,59 @@
+[[functionSignatures]]
+[[functionSignatures.in]]
+importPath = "net/http"
+name = "ResponseWriter"
+
+[[functionSignatures.in]]
+importPath = "net/http"
+name = "Request"
+pointer = true
+
+[[functionSignatures]]
+[[functionSignatures.in]]
+importPath = "github.com/cloudevents/sdk-go/v2"
+name = "Event"
+
+[[functionSignatures.out]]
+importPath = "github.com/cloudevents/sdk-go/v2"
+name = "Event"
+pointer = true
+
+[[functionSignatures.out]]
+name = "error"
+
+[[functionSignatures]]
+[[functionSignatures.in]]
+importPath = "context"
+name = "Context"
+
+[[functionSignatures.in]]
+importPath = "github.com/cloudevents/sdk-go/v2"
+name = "Event"
+
+[[functionSignatures.out]]
+importPath = "github.com/cloudevents/sdk-go/v2"
+name = "Event"
+pointer = true
+
+[[functionSignatures.out]]
+name = "error"
+
+[[functionSignatures]]
+[[functionSignatures.in]]
+importPath = "context"
+name = "Context"
+
+[[functionSignatures.in]]
+importPath = "github.com/mattmoor/korpc-sample/gen/proto"
+name = "Request"
+pointer = true
+channel = "RECEIVE"
+
+[[functionSignatures.in]]
+importPath = "github.com/mattmoor/korpc-sample/gen/proto"
+name = "Response"
+pointer = true
+channel = "BOTH"
+
+[[functionSignatures.out]]
+name = "error"
