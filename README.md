@@ -12,6 +12,9 @@ to simply just call this function.
 # Specifying supported function signatures
 
 You can control which function signatures are supported either by populating the datastructures, or
-by creating a config file (in json or YAML (and hopefully later in toml since we're doing buildpack stuff, 
-seems more prevalent there). For examples on how to use this, best place for
-now is to look at the [test code](./pkg/detect/detect_test.go).
+by creating a config file in JSON, YAML, or TOML. For examples on how to use this, best place for
+now is to look at the [test code](./pkg/detect/detect_test.go). And the corresponding config files
+in:
+1. [JSON](./pkg/detect/testdata/signatures.json)
+1. [YAML](./pkg/detect/testdata/signatures.yaml)
+1. [TOML](./pkg/detect/testdata/signatures.toml) 
