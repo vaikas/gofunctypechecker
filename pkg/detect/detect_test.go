@@ -5,6 +5,9 @@ import "testing"
 const signatureFileJSON = "./testdata/signatures.json"
 const signatureFileYAML = "./testdata/signatures.yaml"
 const signatureFileTOML = "./testdata/signatures.toml"
+const signatureFileURLJSON = "https://raw.githubusercontent.com/vaikas/gofunctypechecker/main/pkg/detect/testdata/signatures.json"
+const signatureFileURLYAML = "https://raw.githubusercontent.com/vaikas/gofunctypechecker/main/pkg/detect/testdata/signatures.yaml"
+const signatureFileURLTOML = "https://raw.githubusercontent.com/vaikas/gofunctypechecker/main/pkg/detect/testdata/signatures.toml"
 
 var tests = map[string]*FunctionDetails{
 	"./testdata/f1.go": &FunctionDetails{
@@ -77,7 +80,7 @@ func TestAllCasesFromJSONFile(t *testing.T) {
 func TestAllCasesFromYAMLFile(t *testing.T) {
 	d, err := NewDetectorFromFile(signatureFileYAML)
 	if err != nil {
-		t.Fatalf("Failed to read function signatures from file: %q : %s ", signatureFileJSON, err)
+		t.Fatalf("Failed to read function signatures from file: %q : %s ", signatureFileYAML, err)
 	}
 	runTests(t, d)
 }
@@ -85,7 +88,31 @@ func TestAllCasesFromYAMLFile(t *testing.T) {
 func TestAllCasesFromTOMLFile(t *testing.T) {
 	d, err := NewDetectorFromFile(signatureFileTOML)
 	if err != nil {
-		t.Fatalf("Failed to read function signatures from file: %q : %s ", signatureFileJSON, err)
+		t.Fatalf("Failed to read function signatures from file: %q : %s ", signatureFileTOML, err)
+	}
+	runTests(t, d)
+}
+
+func TestAllCasesFromURLJSON(t *testing.T) {
+	d, err := NewDetectorFromURL(signatureFileURLJSON)
+	if err != nil {
+		t.Fatalf("Failed to read function signatures from file: %q : %s ", signatureFileURLJSON, err)
+	}
+	runTests(t, d)
+}
+
+func TestAllCasesFromURLYAML(t *testing.T) {
+	d, err := NewDetectorFromURL(signatureFileURLYAML)
+	if err != nil {
+		t.Fatalf("Failed to read function signatures from file: %q : %s ", signatureFileURLYAML, err)
+	}
+	runTests(t, d)
+}
+
+func TestAllCasesFromTOML(t *testing.T) {
+	d, err := NewDetectorFromURL(signatureFileURLTOML)
+	if err != nil {
+		t.Fatalf("Failed to read function signatures from file: %q : %s ", signatureFileURLTOML, err)
 	}
 	runTests(t, d)
 }
