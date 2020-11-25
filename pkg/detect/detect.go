@@ -1,15 +1,17 @@
 package detect
 
 import (
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/ioutil"
+	"log"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/ghodss/yaml"
 )
 
 type Function struct {
@@ -17,19 +19,39 @@ type Function struct {
 	Source string // full source file
 }
 
+type ChanDir string
+
+const (
+	Send    ChanDir = "SEND"
+	Receive ChanDir = "RECEIVE"
+	Both    ChanDir = "BOTH"
+)
+
 // FunctionArg describes a single argument (input or output) for a given variable
 // For example a function from "net/http" that conforms to the Handler function, that looks
 // like this "func(http.ResponseWriter, *http.Request)" would have two arguments like so:
 // FunctionArg{ImportPath: "net/http", Name: "ResponseWriter"}
 // FunctionArg{ImportPath: "net/http", Name: "Request", Pointer: true}
 type FunctionArg struct {
-	ImportPath string `json:"importPath,omitempty"`
-	Name       string `json:"name"`
-	Pointer    bool   `json:"pointer,omitempty"`
+	ImportPath string  `json:"importPath,omitempty"`
+	Name       string  `json:"name"`
+	Pointer    bool    `json:"pointer,omitempty"`
+	Channel    ChanDir `json:"channel,omitempty"`
 }
 
 func (fa *FunctionArg) String() string {
 	ret := ""
+
+	// If it's a channel, print it out.
+	switch fa.Channel {
+	case Both:
+		ret += "chan "
+	case Receive:
+		ret += "<-chan "
+	case Send:
+		ret += "chan<- "
+	}
+
 	if fa.Pointer {
 		ret += "*"
 	}
@@ -69,6 +91,9 @@ func (fs *FunctionSignature) String() string {
 	if len(fs.Out) > 0 {
 		if len(fs.Out) > 1 {
 			s += " ("
+		} else {
+			// Just a single argument, no parens, just a space please.
+			s += " "
 		}
 		for i, out := range fs.Out {
 			s += out.String()
@@ -103,7 +128,7 @@ func NewDetectorFromFile(fileName string) (*Detector, error) {
 		return nil, err
 	}
 	var fs FunctionSignatures
-	if err := json.Unmarshal([]byte(in), &fs); err != nil {
+	if err := yaml.Unmarshal([]byte(in), &fs); err != nil {
 		return nil, err
 	}
 	return &Detector{sigs: fs.FunctionSignatures}, err
@@ -172,10 +197,6 @@ func (d *Detector) CheckFile(f *Function) (*FunctionDetails, error) {
 					localImports[pathPieces[len(pathPieces)-1]] = impPath
 				}
 			}
-			for li, imp := range localImports {
-				fmt.Printf("%q => %q\n", li, imp)
-			}
-
 			for _, decl := range fn.Decls {
 				if f, ok := decl.(*ast.FuncDecl); ok {
 					functionName = f.Name.Name
@@ -221,13 +242,6 @@ func (d *Detector) checkFunction(c map[string]string, f *ast.FuncType) string {
 		}
 	}
 
-	for _, a := range fs.In {
-		fmt.Printf("Input arg: %+v\n", a)
-	}
-	for _, a := range fs.Out {
-		fmt.Printf("Output arg: %+v\n", a)
-	}
-
 	for _, v := range d.sigs {
 		sig := v.String()
 		fmt.Printf("Checking function signature: %q\n", sig)
@@ -246,6 +260,7 @@ func (d *Detector) checkFunction(c map[string]string, f *ast.FuncType) string {
 				}
 			}
 			if match {
+				fmt.Printf("Found matching signature: %q\n", sig)
 				return sig
 			}
 		}
@@ -271,6 +286,36 @@ func typeToFunctionArg(c map[string]string, e ast.Expr) FunctionArg {
 	case *ast.Ident:
 		// Built In... Or something else?
 		return FunctionArg{Name: e.Name}
+	case *ast.ChanType:
+		dataType := starOrSelect(c, e.Value)
+		switch e.Dir {
+		case ast.RECV:
+			dataType.Channel = Receive
+		case ast.SEND:
+			dataType.Channel = Send
+		case ast.RECV | ast.SEND:
+			dataType.Channel = Both
+		}
+		return dataType
 	}
+	return FunctionArg{}
+}
+
+// starOrSelect is a helper that partially fills in the FunctionArg
+// for either a Star (pointer) or simple non-pointer param type.
+func starOrSelect(c map[string]string, e ast.Expr) FunctionArg {
+	switch e := e.(type) {
+	case *ast.StarExpr:
+		if s, ok := e.X.(*ast.SelectorExpr); ok {
+			if im, ok := s.X.(*ast.Ident); ok {
+				return FunctionArg{ImportPath: c[im.Name], Name: s.Sel.String(), Pointer: true}
+			}
+		}
+	case *ast.SelectorExpr:
+		if im, ok := e.X.(*ast.Ident); ok {
+			return FunctionArg{ImportPath: c[im.Name], Name: e.Sel.String()}
+		}
+	}
+	log.Fatalf("Invalid expression given to startOrSelect: %T\n", e)
 	return FunctionArg{}
 }
