@@ -12,5 +12,6 @@ to simply just call this function.
 # Specifying supported function signatures
 
 You can control which function signatures are supported either by populating the datastructures, or
-by creating a config file (in json, later yaml & toml). For examples on how to use this, best place for
+by creating a config file (in json or YAML (and hopefully later in toml since we're doing buildpack stuff, 
+seems more prevalent there). For examples on how to use this, best place for
 now is to look at the [test code](./pkg/detect/detect_test.go).
