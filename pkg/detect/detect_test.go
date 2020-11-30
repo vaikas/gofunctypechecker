@@ -32,6 +32,10 @@ var tests = map[string]*FunctionDetails{
 		Name:      "Impl",
 		Signature: "func(context.Context, <-chan *proto.Request, chan *proto.Response) error",
 	},
+	"./testdata/f8.go": &FunctionDetails{
+		Name:      "Receive",
+		Signature: "func(http.ResponseWriter, *http.Request)",
+	},
 }
 
 func TestAllCases(t *testing.T) {
@@ -137,5 +141,41 @@ func runTests(t *testing.T, d *Detector) {
 				}
 			}
 		})
+	}
+}
+
+func TestMultiDetect(t *testing.T) {
+	d, err := NewDetectorFromFile(signatureFileJSON)
+	if err != nil {
+		t.Fatalf("Failed to read function signatures from file: %q : %s ", signatureFileJSON, err)
+	}
+
+	want := []FunctionDetails{
+		{
+			Name:      "ReceiveHTTP",
+			Signature: "func(http.ResponseWriter, *http.Request)",
+		},
+		{
+			Name:      "ReceiveEvent",
+			Signature: "func(v2.Event) (*v2.Event, error)",
+		},
+	}
+	testfile := "./testdata/multi-fn.go"
+
+	if got, err := d.ReadAndCheckFile(testfile); err == nil {
+		t.Errorf("Expected checking error on multi-file, got: %+v", got)
+	}
+
+	got, err := d.ReadAllFromFile(testfile)
+	if err != nil {
+		t.Errorf("Expected no error detecting signatures, got %v", err)
+	}
+	if len(got) != len(want) {
+		t.Errorf("Wanted %v, got %v", want, got)
+	}
+	for i := range want {
+		if want[i] != got[i] {
+			t.Errorf("Error at %d, wanted %v, got %v", i, want[i], got[i])
+		}
 	}
 }

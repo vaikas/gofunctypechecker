@@ -1,12 +1,11 @@
 package stream
 
 import (
-"context"
-"errors"
+	"context"
+	"errors"
 
-pb "github.com/mattmoor/korpc-sample/gen/proto"
+	pb "github.com/mattmoor/korpc-sample/gen/proto"
 )
-
 
 func Impl(ctx context.Context, req <-chan *pb.Request, resp chan *pb.Response) error {
 	for {
