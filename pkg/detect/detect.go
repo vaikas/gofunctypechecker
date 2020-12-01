@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/ghodss/yaml"
-    "github.com/BurntSushi/toml"
 )
 
 type Function struct {
@@ -177,15 +177,42 @@ func (d *Detector) ReadAndCheckFile(filename string) (*FunctionDetails, error) {
 	if err != nil {
 		return nil, err
 	}
-	return d.CheckFile(&Function{File: filename, Source: string(src)})
+	return d.CheckFile(&Function{File: filename, Source: src})
+}
+
+func (d *Detector) ReadAllFromFile(filename string) ([]FunctionDetails, error) {
+	src, err := readFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	return d.AllFromFile(&Function{File: filename, Source: src})
 }
 
 func (d *Detector) CheckFile(f *Function) (*FunctionDetails, error) {
+	found, err := d.AllFromFile(f)
+	if err != nil {
+		return nil, err
+	}
+	if len(found) > 1 {
+		names := make([]string, 0, len(found))
+		for _, f := range found {
+			names = append(names, f.Name)
+		}
+		return &found[0], fmt.Errorf("Found %d matching signatures, expecting 1: %s", len(found), names)
+	}
+	if len(found) == 0 {
+		return nil, nil
+	}
+	return &found[0], err
+}
+
+func (d *Detector) AllFromFile(f *Function) ([]FunctionDetails, error) {
+	var retval []FunctionDetails
 	// file set
 	fset := token.NewFileSet()
 	astFile, err := parser.ParseFile(fset, f.File, f.Source, 0)
 	if err != nil {
-		return nil, err
+		return retval, err
 	}
 
 	// imports keeps track of which files that we care about are imported as which
@@ -193,9 +220,6 @@ func (d *Detector) CheckFile(f *Function) (*FunctionDetails, error) {
 	// 	nethttp "net/http"
 	// localImports["nethttp"] -> "net/http"
 	localImports := make(map[string]string)
-
-	var functionName = ""
-	var signature = ""
 
 	// main inspection
 	ast.Inspect(astFile, func(n ast.Node) bool {
@@ -222,22 +246,18 @@ func (d *Detector) CheckFile(f *Function) (*FunctionDetails, error) {
 			}
 			for _, decl := range fn.Decls {
 				if f, ok := decl.(*ast.FuncDecl); ok {
-					functionName = f.Name.Name
 					if f.Recv != nil {
 						fmt.Println("Found receiver ", f.Recv)
 					}
 					if sig := d.checkFunction(localImports, f.Type); sig != "" {
-						signature = sig
+						retval = append(retval, FunctionDetails{Name: f.Name.Name, Signature: sig})
 					}
 				}
 			}
 		}
 		return true
 	})
-	if signature != "" && functionName != "" {
-		return &FunctionDetails{Name: functionName, Signature: signature}, nil
-	}
-	return nil, nil
+	return retval, nil
 }
 
 // checkFunction takes a function signature and returns a friendly (string)
