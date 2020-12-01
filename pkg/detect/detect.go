@@ -157,6 +157,14 @@ func NewDetectorFromString(config string) (*Detector, error) {
 	return &Detector{sigs: fs.FunctionSignatures}, nil
 }
 
+func (d *Detector) Signatures() string{
+	ret := ""
+	for _, sig := range d.sigs {
+		ret += sig.String() + "\n"
+	}
+	return ret
+}
+
 func readFile(filename string) (string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
